@@ -131,7 +131,9 @@ curl -X GET "http://localhost:8000/transcription/health"
 ### 1. Transcrever Arquivo de Áudio (Upload)
 
 **Formatos suportados:** mp3, mp4, mpeg, mpga, m4a, wav, webm, ogg, flac
-**Tamanho máximo:** 25MB (arquivos WAV maiores são automaticamente comprimidos)
+**Tamanho máximo:**
+- Arquivos normais: 25MB
+- Arquivos WAV: até ~50MB (compressão automática reduz para <25MB)
 
 ```bash
 curl -X POST "http://localhost:8000/transcription/" \
@@ -199,6 +201,14 @@ curl -X POST "http://localhost:8000/transcription/" \
 ### 3. Transcrever Áudio via Base64
 
 **Formatos suportados:** mp3, mp4, mpeg, mpga, m4a, wav, webm, ogg, flac
+
+**Limites de tamanho para Base64:**
+- String Base64: máximo de 140MB (~105MB de arquivo decodificado)
+- Arquivo decodificado: máximo de 100MB antes de compressão
+- Arquivo após compressão WAV: deve ser <25MB para envio à OpenAI
+- Recomendado: usar MP3 com bitrate baixo para arquivos grandes
+
+> **💡 Dica:** Base64 adiciona ~33% de overhead. Um arquivo de 75MB vira ~100MB em base64.
 
 #### Passo 1: Converter áudio para Base64
 
@@ -346,7 +356,8 @@ done
 | 200 | Success | Requisição bem-sucedida |
 | 400 | Bad Request | Formato de arquivo inválido ou Base64 inválido |
 | 401 | Unauthorized | Token inválido, expirado ou credenciais incorretas |
-| 413 | Payload Too Large | Arquivo excede o limite de tamanho |
+| 413 | Payload Too Large | Arquivo excede o limite de tamanho (25MB para normais, 100MB para base64) |
+| 504 | Gateway Timeout | Timeout no processamento (arquivo muito grande/complexo) |
 | 500 | Internal Server Error | Erro no processamento |
 
 ---
@@ -381,6 +392,40 @@ ADMIN_PASSWORD=your_secure_password
 4. **Base64:** Útil para integração com sistemas que não suportam multipart/form-data
 5. **Logs:** Verifique a pasta `/logs` para debug de requisições
 
+### 💾 Otimização de Arquivos Grandes
+
+#### Para transcrição de voz (recomendado):
+```bash
+# Configuração otimizada para voz humana
+ffmpeg -i audio_original.mp3 \
+  -b:a 64k \      # Bitrate baixo (suficiente para voz)
+  -ar 16000 \     # Sample rate 16kHz (ideal para Whisper)
+  -ac 1 \         # Mono (voz não precisa stereo)
+  audio_otimizado.mp3
+
+# Resultado: arquivo ~10x menor com qualidade suficiente para transcrição
+```
+
+#### Exemplos de redução de tamanho:
+- **Áudio original (stereo, 44.1kHz, 128kbps):** 100MB
+- **Após otimização (mono, 16kHz, 64kbps):** ~10MB
+- **Tempo de processamento:** mais rápido e mais barato
+
+#### Como comprimir antes de enviar em Base64:
+```bash
+# 1. Comprimir o áudio
+ffmpeg -i audio_grande.mp3 -b:a 64k -ar 16000 -ac 1 audio_comprimido.mp3
+
+# 2. Converter para base64
+AUDIO_BASE64=$(base64 -w 0 audio_comprimido.mp3)
+
+# 3. Enviar via API
+curl -X POST "http://localhost:8000/transcription/base64" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"audio_base64\": \"$AUDIO_BASE64\", \"filename\": \"audio.mp3\"}"
+```
+
 ---
 
 ## 🔍 Troubleshooting
@@ -395,6 +440,8 @@ curl -X POST "http://localhost:8000/transcription/" \
 ```
 
 ### Erro 413 - File Too Large
+
+#### Para uploads normais:
 ```bash
 # Verifique o tamanho do arquivo
 ls -lh audio.mp3
@@ -403,10 +450,59 @@ ls -lh audio.mp3
 # Para outros formatos: deve ser <25MB
 ```
 
+#### Para Base64 (arquivos grandes):
+```bash
+# 1. Verifique o tamanho do arquivo original
+ls -lh audio.mp3
+
+# 2. Calcule o tamanho estimado em base64 (arquivo_size * 1.33)
+# Exemplo: 75MB * 1.33 = ~100MB base64
+
+# 3. Se muito grande, comprima antes de enviar:
+# Opção 1: Converter para MP3 com bitrate mais baixo
+ffmpeg -i audio.wav -b:a 64k -ar 16000 audio_compressed.mp3
+
+# Opção 2: Usar formato WAV que será comprimido automaticamente pela API
+# (funciona para arquivos até ~50MB)
+```
+
+#### Soluções para arquivos muito grandes:
+```bash
+# 1. Reduzir bitrate do MP3
+ffmpeg -i audio_original.mp3 -b:a 64k audio_compressed.mp3
+
+# 2. Reduzir sample rate (ideal para voz: 16kHz)
+ffmpeg -i audio_original.mp3 -ar 16000 audio_compressed.mp3
+
+# 3. Converter para mono (reduz ~50% do tamanho)
+ffmpeg -i audio_stereo.mp3 -ac 1 audio_mono.mp3
+
+# 4. Combinação completa (melhor compressão)
+ffmpeg -i audio_original.mp3 -b:a 64k -ar 16000 -ac 1 audio_final.mp3
+```
+
 ### Erro 400 - Invalid Format
 ```bash
 # Verifique a extensão do arquivo
 file audio.mp3
 
 # Formatos válidos: mp3, mp4, mpeg, mpga, m4a, wav, webm, ogg, flac
+```
+
+### Erro 504 - Gateway Timeout
+```bash
+# O arquivo pode ser muito grande ou complexo
+# Soluções:
+# 1. Comprima o arquivo antes de enviar
+# 2. Divida em partes menores (se aplicável)
+# 3. Use formato mais comprimido (MP3 ao invés de WAV)
+```
+
+### Erro ao decodificar Base64
+```bash
+# Verifique se o base64 está correto
+echo "SEU_BASE64_AQUI" | base64 -d > test.mp3
+
+# Se der erro, re-encode corretamente:
+base64 -w 0 audio.mp3 > audio_base64.txt
 ```

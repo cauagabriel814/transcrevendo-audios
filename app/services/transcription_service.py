@@ -167,9 +167,27 @@ class TranscriptionService:
             }
 
         except Exception as e:
+            # Melhorar mensagem de erro para problemas comuns
+            error_message = str(e)
+
+            # Detectar erros de timeout
+            if "timeout" in error_message.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail=f"Timeout ao processar áudio. O arquivo pode ser muito grande ou complexo. Tente com um arquivo menor ou em formato mais comprimido."
+                )
+
+            # Detectar erros de tamanho da API OpenAI
+            if "file size" in error_message.lower() or "too large" in error_message.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"Arquivo rejeitado pela API OpenAI (limite de 25MB). Tamanho atual: {file_size / (1024 * 1024):.2f}MB. Comprima o arquivo antes de enviar."
+                )
+
+            # Erro genérico
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Erro ao transcrever áudio: {str(e)}"
+                detail=f"Erro ao transcrever áudio: {error_message}"
             )
 
     async def transcribe_audio_base64(self, audio_base64: str, filename: str) -> dict:
@@ -197,13 +215,27 @@ class TranscriptionService:
                 detail=f"Formato de arquivo não suportado. Formatos aceitos: {', '.join(allowed_formats)}"
             )
 
+        # Validar tamanho do base64 antes de decodificar
+        # Base64 é aproximadamente 33% maior que o arquivo binário
+        base64_size = len(audio_base64)
+        estimated_file_size = (base64_size * 3) / 4
+
+        # Limite máximo mais generoso para base64 (aproximadamente 100MB decodificado)
+        max_base64_size = 140 * 1024 * 1024  # ~140MB base64 = ~100MB arquivo
+
+        if base64_size > max_base64_size:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"String base64 muito grande: {base64_size / (1024 * 1024):.2f}MB (tamanho estimado do arquivo: {estimated_file_size / (1024 * 1024):.2f}MB). Limite máximo: {max_base64_size / (1024 * 1024):.2f}MB base64."
+            )
+
         try:
             # Decodificar base64
-            audio_bytes = base64.b64decode(audio_base64)
+            audio_bytes = base64.b64decode(audio_base64, validate=True)
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Erro ao decodificar base64: {str(e)}"
+                detail=f"Erro ao decodificar base64: {str(e)}. Verifique se a string está corretamente codificada em base64."
             )
 
         file_size = len(audio_bytes)
@@ -222,13 +254,13 @@ class TranscriptionService:
                 if file_size > self.max_size:
                     raise HTTPException(
                         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                        detail=f"Arquivo WAV muito grande mesmo após compressão. Original: {original_size / (1024 * 1024):.2f}MB, Comprimido: {file_size / (1024 * 1024):.2f}MB. Limite: 25MB"
+                        detail=f"Arquivo WAV muito grande mesmo após compressão. Original: {original_size / (1024 * 1024):.2f}MB, Comprimido: {file_size / (1024 * 1024):.2f}MB. Limite: 25MB. Considere usar um formato mais comprimido como MP3."
                     )
             else:
                 # Para outros formatos, retornar erro explicativo
                 raise HTTPException(
                     status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    detail=f"Arquivo muito grande: {file_size / (1024 * 1024):.2f}MB. Limite: 25MB. Para arquivos maiores, use formato WAV que possui compressão automática."
+                    detail=f"Arquivo muito grande: {file_size / (1024 * 1024):.2f}MB. Limite: 25MB. Formatos recomendados para arquivos grandes: MP3 (com bitrate baixo) ou WAV (com compressão automática). Considere comprimir o arquivo antes de enviá-lo."
                 )
 
         try:
@@ -255,9 +287,27 @@ class TranscriptionService:
             }
 
         except Exception as e:
+            # Melhorar mensagem de erro para problemas comuns
+            error_message = str(e)
+
+            # Detectar erros de timeout
+            if "timeout" in error_message.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail=f"Timeout ao processar áudio. O arquivo pode ser muito grande ou complexo. Tente com um arquivo menor ou em formato mais comprimido."
+                )
+
+            # Detectar erros de tamanho da API OpenAI
+            if "file size" in error_message.lower() or "too large" in error_message.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"Arquivo rejeitado pela API OpenAI (limite de 25MB). Tamanho atual: {file_size / (1024 * 1024):.2f}MB. Comprima o arquivo antes de enviar."
+                )
+
+            # Erro genérico
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Erro ao transcrever áudio: {str(e)}"
+                detail=f"Erro ao transcrever áudio: {error_message}"
             )
 
 

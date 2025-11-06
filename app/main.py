@@ -21,9 +21,15 @@ app = FastAPI(
     1. Obtenha um token JWT no endpoint `/auth/token`
     2. Use o token no header `Authorization: Bearer {token}`
     3. Envie o áudio para `/transcription/`
+
+    ### Limites:
+    * Request body: até 150MB (para base64)
+    * Arquivo após decodificação: até 100MB
+    * Arquivo enviado à OpenAI: até 25MB (compressão automática para WAV)
     """,
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    max_request_body_size=150 * 1024 * 1024  # 150MB para base64 grandes
 )
 
 # Configurar CORS
