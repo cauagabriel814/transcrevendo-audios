@@ -14,7 +14,12 @@ class TranscriptionService:
     """
 
     def __init__(self):
-        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        # Configurar cliente OpenAI com timeout de 10 minutos (600 segundos)
+        self.client = OpenAI(
+            api_key=settings.OPENAI_API_KEY,
+            timeout=600.0,  # 10 minutos para transcrições grandes
+            max_retries=2
+        )
         self.max_size = 25 * 1024 * 1024  # 25MB em bytes
 
     def _compress_audio_wav(self, audio_bytes: bytes, filename: str) -> tuple[bytes, str]:
