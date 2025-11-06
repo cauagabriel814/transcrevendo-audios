@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+python-jose
+passlib
+python-dotenv
+openai
+pydantic
+pydantic-settings
+numpy
