@@ -8,3 +8,5 @@ openai
 pydantic
 pydantic-settings
 numpy
+pydub
+audioop-lts

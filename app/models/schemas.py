@@ -38,6 +38,8 @@ class TranscriptionResponse(BaseModel):
     language: Optional[str] = Field(None, description="Idioma detectado")
     duration: Optional[float] = Field(None, description="Duração do processamento em segundos")
     compressed: Optional[bool] = Field(False, description="Indica se o áudio foi comprimido automaticamente")
+    chunks_processed: Optional[int] = Field(None, description="Número de chunks processados (para áudios longos)")
+    original_duration_minutes: Optional[float] = Field(None, description="Duração original do áudio em minutos")
 
     model_config = {
         "json_schema_extra": {
@@ -45,8 +47,10 @@ class TranscriptionResponse(BaseModel):
                 {
                     "text": "Este é o texto transcrito do áudio",
                     "language": "pt",
-                    "duration": 2.5,
-                    "compressed": False
+                    "duration": 45.3,
+                    "compressed": True,
+                    "chunks_processed": 3,
+                    "original_duration_minutes": 12.5
                 }
             ]
         }

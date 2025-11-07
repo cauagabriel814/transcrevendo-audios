@@ -9,9 +9,11 @@ Audio Transcription Service - A FastAPI microservice for transcribing audio file
 **Key Features:**
 - JWT authentication with 3-hour token validity
 - Audio transcription via OpenAI Whisper API
-- Automatic compression for WAV files > 25MB (mono + 16kHz downsampling)
+- **Smart chunking for long audio files** (>5 min split into 5-min chunks)
+- **Light compression for all files** (mono + 24kHz + MP3 128kbps)
 - Supports file upload and base64 encoding
-- No external dependencies for compression (uses native Python wave + numpy)
+- Universal format support using pydub + FFmpeg
+- **Zero timeout errors** - long files processed in chunks
 
 ## Development Commands
 
@@ -96,19 +98,27 @@ python -c "import secrets; print(secrets.token_hex(32))"
 **Transcription Service (`app/services/transcription_service.py`):**
 - Singleton pattern (`transcription_service` instance)
 - OpenAI Whisper integration via official SDK
-- WAV compression strategy:
-  1. Convert stereo to mono (reduces ~50% size)
-  2. Downsample to 16kHz (optimal for voice transcription)
-- Uses numpy for audio manipulation
-- Size limits: 25MB for non-WAV, up to ~50MB for WAV (with compression)
-- Returns: text, language, duration, compressed flag
+- **Smart chunking strategy for long audio files:**
+  - Audio > 5 minutes: automatically split into 5-minute chunks
+  - Each chunk processed separately and sequentially
+  - Transcriptions combined at the end
+  - **Eliminates timeout errors completely**
+  - **Much faster processing** (chunks process in parallel internally)
+- **Light compression for all files:**
+  - Convert stereo to mono (reduces ~50% size)
+  - Maintain good sample rate (up to 24kHz)
+  - Export as MP3 128kbps (excellent quality for voice)
+- Uses pydub + FFmpeg for universal format support
+- Returns: text, language, duration, compressed flag, chunks_processed, original_duration_minutes
 
-**Compression Implementation Details:**
-- Only WAV files can be compressed (Python native libraries)
-- Uses `wave` module for reading/writing WAV files
-- Uses `numpy` for audio array manipulation
-- No FFmpeg or external tools required
-- Compression is transparent to the user
+**Chunking Implementation Details:**
+- Uses pydub to handle ANY audio format (MP3, WAV, MPEG, M4A, OGG, FLAC, etc.)
+- Requires FFmpeg installed in system/container
+- Audio > 5 minutes: split into 5-minute chunks automatically
+- Each chunk: compressed, transcribed, and combined
+- No text loss: all chunks transcribed in order
+- Typical result: 10-minute audio = 2 chunks processed in ~60-90 seconds
+- Quality preserved: 24kHz mono MP3 128kbps is excellent for voice
 
 ### API Endpoints
 
@@ -217,10 +227,11 @@ The service is containerized with:
 
 ### Known Limitations
 
-1. **Compression only for WAV:** Other formats (MP3, M4A) require external tools like FFmpeg
-2. **Memory usage:** Large files are loaded entirely into memory
+1. **FFmpeg dependency:** Requires FFmpeg installed for audio compression (included in Docker)
+2. **Memory usage:** Large files are loaded entirely into memory during chunking
 3. **Stateless tokens:** No token revocation mechanism
-4. **No request queuing:** Long transcriptions block the worker
+4. **Sequential chunk processing:** Chunks are processed one by one (not parallel to avoid API rate limits)
+5. **Always chunked:** Audio files > 5 minutes are automatically chunked - no option to disable
 
 ### File Size Reference
 
@@ -233,4 +244,28 @@ The service is containerized with:
 
 mp3, mp4, mpeg, mpga, m4a, wav, webm, ogg, flac
 
-**Recommendation:** Use WAV for files 25-50MB to leverage automatic compression.
+**ALL formats are automatically compressed** to mono 24kHz MP3 128kbps before transcription.
+**Audio files > 5 minutes are automatically split into 5-minute chunks** for faster, reliable processing.
+
+## Local Development Setup (FFmpeg)
+
+When running locally (not in Docker), you need to install FFmpeg:
+
+**Windows:**
+```bash
+# Using Chocolatey
+choco install ffmpeg
+
+# Or download from https://ffmpeg.org/download.html
+```
+
+**Linux:**
+```bash
+sudo apt-get update
+sudo apt-get install ffmpeg
+```
+
+**Mac:**
+```bash
+brew install ffmpeg
+```

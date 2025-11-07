@@ -4,10 +4,16 @@ FROM python:3.11-slim
 # Definir diretório de trabalho
 WORKDIR /app
 
+# Instalar FFmpeg (necessário para pydub comprimir áudios)
+RUN apt-get update && \
+    apt-get install -y ffmpeg && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copiar apenas requirements primeiro (cache de layers do Docker)
 COPY requirements.txt .
 
-# Instalar dependências
+# Instalar dependências Python
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar o código da aplicação
